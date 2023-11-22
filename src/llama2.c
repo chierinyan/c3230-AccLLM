@@ -46,22 +46,28 @@ $ ./llama2_[UID] <seed> <thr_count>
 #include <pthread.h>
 
 // Global Variables
-struct rusage main_usage;        // get usage for main thread
+struct rusage main_usage;
 
 int init_mat_vec_mul(int thr_count) {
-
+    return 233;
 }
 
 void mat_vec_mul(float* out, float* vec, float* mat, int col, int row) {
-
+    for (int r = 0; r < row; r++) {
+        float row_res = 0.0f;
+        for (int c = 0; c < col; c++) {
+            row_res += mat[r * col + c] * vec[c]; // mat[r * col + c] := mat[r][c]
+        }
+        out[r] = row_res;
+    }
 }
 
 int close_mat_vec_mul() {
-
+    return 233;
 }
 
 void *thr_func(void *arg) {
-
+    return NULL;
 }
 
 // YOUR CODE ENDS HERE
