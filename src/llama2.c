@@ -47,6 +47,7 @@ $ ./llama2_[UID] <seed> <thr_count>
 #include <semaphore.h>
 
 struct thr_arg {
+    int id;
     int start;
     int end;
     int col;
@@ -62,14 +63,17 @@ int _thr_count;
 int finished = 0;
 pthread_t tids[32];
 struct thr_arg args[32];
-struct rusage main_usage;
+
+double timeval_to_s(struct timeval* tv) {
+    return tv->tv_sec + tv->tv_usec / 1000000.0;
+}
 
 
 void *thr_func(void *arg) {
     struct thr_arg* a = (struct thr_arg*) arg;
     while (1) {
         sem_wait(&a->start_sem);
-        if (finished) return NULL;
+        if (finished) break;
 
         for (int r = a->start; r < a->end; r++) {
             float row_out = 0.0f;
@@ -80,11 +84,18 @@ void *thr_func(void *arg) {
         }
         sem_post(&a->end_sem);
     }
+
+    struct rusage usage;
+    getrusage(RUSAGE_THREAD, &usage);
+    printf("thread %d has completed - user: %f s, system: %f s\n", a->id,
+           timeval_to_s(&usage.ru_utime), timeval_to_s(&usage.ru_stime));
+    return NULL;
 }
 
 int init_mat_vec_mul(int thr_count) {
     _thr_count = thr_count;
     for (int i = 0; i < thr_count; i++) {
+        args[i].id = i;
         sem_init(&args[i].start_sem, 0, 0);
         sem_init(&args[i].end_sem, 0, 0);
         pthread_create(&tids[i], NULL, thr_func, &args[i]);
@@ -112,8 +123,14 @@ int close_mat_vec_mul() {
     finished = 1;
     for (int thr = 0; thr < _thr_count; thr++) {
         sem_post(&args[thr].start_sem);
+        pthread_join(tids[thr], NULL);
         sem_destroy(&args[thr].start_sem);
     }
+
+    struct rusage main_usage;
+    getrusage(RUSAGE_SELF, &main_usage);
+    printf("main thread - user: %f s, system: %f s\n",
+           timeval_to_s(&main_usage.ru_utime), timeval_to_s(&main_usage.ru_stime));
     return 0;
 }
 
