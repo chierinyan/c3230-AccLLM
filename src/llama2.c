@@ -61,8 +61,8 @@ struct thr_arg {
 // Global Variables
 int _thr_count;
 int finished = 0;
-pthread_t tids[32];
-struct thr_arg args[32];
+pthread_t* tids;
+struct thr_arg* args;
 
 double timeval_to_s(struct timeval* tv) {
     return tv->tv_sec + tv->tv_usec / 1000000.0;
@@ -94,6 +94,8 @@ void *thr_func(void *arg) {
 
 int init_mat_vec_mul(int thr_count) {
     _thr_count = thr_count;
+    tids = malloc(sizeof(pthread_t) * thr_count);
+    args = malloc(sizeof(struct thr_arg) * thr_count);
     for (int i = 0; i < thr_count; i++) {
         args[i].id = i;
         sem_init(&args[i].start_sem, 0, 0);
@@ -126,6 +128,8 @@ int close_mat_vec_mul() {
         pthread_join(tids[thr], NULL);
         sem_destroy(&args[thr].start_sem);
     }
+    free(tids);
+    free(args);
 
     struct rusage main_usage;
     getrusage(RUSAGE_SELF, &main_usage);
