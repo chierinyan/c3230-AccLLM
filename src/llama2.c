@@ -44,30 +44,77 @@ $ ./llama2_[UID] <seed> <thr_count>
 
 // Addtional Header File Here
 #include <pthread.h>
+#include <semaphore.h>
+
+struct thr_arg {
+    int start;
+    int end;
+    int col;
+    float* vec;
+    float* mat;
+    float* out;
+    sem_t start_sem;
+    sem_t end_sem;
+};
 
 // Global Variables
+int _thr_count;
+int finished = 0;
+pthread_t tids[32];
+struct thr_arg args[32];
 struct rusage main_usage;
 
+
+void *thr_func(void *arg) {
+    struct thr_arg* a = (struct thr_arg*) arg;
+    while (1) {
+        sem_wait(&a->start_sem);
+        if (finished) return NULL;
+
+        for (int r = a->start; r < a->end; r++) {
+            float row_out = 0.0f;
+            for (int c = 0; c < a->col; c++) {
+                row_out += a->vec[c] * a->mat[r*a->col+c];
+            }
+            a->out[r] = row_out;
+        }
+        sem_post(&a->end_sem);
+    }
+}
+
 int init_mat_vec_mul(int thr_count) {
-    return 233;
+    _thr_count = thr_count;
+    for (int i = 0; i < thr_count; i++) {
+        sem_init(&args[i].start_sem, 0, 0);
+        sem_init(&args[i].end_sem, 0, 0);
+        pthread_create(&tids[i], NULL, thr_func, &args[i]);
+    }
+    return 0;
 }
 
 void mat_vec_mul(float* out, float* vec, float* mat, int col, int row) {
-    for (int r = 0; r < row; r++) {
-        float row_res = 0.0f;
-        for (int c = 0; c < col; c++) {
-            row_res += mat[r * col + c] * vec[c]; // mat[r * col + c] := mat[r][c]
-        }
-        out[r] = row_res;
+    int row_per_thr = (row+_thr_count-1)/_thr_count; // floor(row, thr_count)
+    for (int thr = 0; thr < _thr_count; thr+=1) {
+        args[thr].start = thr*row_per_thr;
+        args[thr].end = (thr+1)*row_per_thr<row ? (thr+1)*row_per_thr : row;
+        args[thr].col = col;
+        args[thr].vec = vec;
+        args[thr].mat = mat;
+        args[thr].out = out;
+        sem_post(&args[thr].start_sem);
+    }
+    for (int thr=0; thr<_thr_count; thr++) {
+        sem_wait(&args[thr].end_sem);
     }
 }
 
 int close_mat_vec_mul() {
-    return 233;
-}
-
-void *thr_func(void *arg) {
-    return NULL;
+    finished = 1;
+    for (int thr = 0; thr < _thr_count; thr++) {
+        sem_post(&args[thr].start_sem);
+        sem_destroy(&args[thr].start_sem);
+    }
+    return 0;
 }
 
 // YOUR CODE ENDS HERE
